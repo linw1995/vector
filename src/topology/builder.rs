@@ -59,9 +59,10 @@ static ENRICHMENT_TABLES: LazyLock<vector_lib::enrichment::TableRegistry> =
     LazyLock::new(vector_lib::enrichment::TableRegistry::default);
 
 pub(crate) static SOURCE_SENDER_BUFFER_SIZE: LazyLock<usize> =
-    LazyLock::new(|| *TRANSFORM_CONCURRENCY_LIMIT * CHUNK_SIZE);
+    LazyLock::new(|| *TRANSFORM_CONCURRENCY_LIMIT * *CHUNK_SIZE);
 
-const READY_ARRAY_CAPACITY: NonZeroUsize = unsafe { NonZeroUsize::new_unchecked(CHUNK_SIZE * 4) };
+static READY_ARRAY_CAPACITY: LazyLock<NonZeroUsize> =
+    LazyLock::new(|| NonZeroUsize::new(*CHUNK_SIZE * 4).unwrap());
 pub(crate) const TOPOLOGY_BUFFER_SIZE: NonZeroUsize = unsafe { NonZeroUsize::new_unchecked(100) };
 
 static TRANSFORM_CONCURRENCY_LIMIT: LazyLock<usize> = LazyLock::new(|| {
@@ -898,7 +899,7 @@ impl Runner {
             .filter(move |events| ready(filter_events_type(events, self.input_type)));
 
         let mut input_rx =
-            super::ready_arrays::ReadyArrays::with_capacity(input_rx, READY_ARRAY_CAPACITY);
+            super::ready_arrays::ReadyArrays::with_capacity(input_rx, *READY_ARRAY_CAPACITY);
 
         let mut in_flight = FuturesOrdered::new();
         let mut shutting_down = false;

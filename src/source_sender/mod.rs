@@ -1,5 +1,5 @@
 #![allow(missing_docs)]
-use std::{collections::HashMap, fmt, sync::Arc, time::Instant};
+use std::{collections::HashMap, fmt, sync::Arc, sync::LazyLock, time::Instant};
 
 use chrono::Utc;
 use futures::{Stream, StreamExt};
@@ -29,7 +29,11 @@ use crate::config::{ComponentKey, OutputId};
 use crate::schema::Definition;
 pub use errors::{ClosedError, StreamSendError};
 
-pub(crate) const CHUNK_SIZE: usize = 1000;
+pub(crate) const CHUNK_SIZE: LazyLock<usize> = LazyLock::new(|| {
+    crate::app::chunk_size()
+        .map(std::num::NonZeroUsize::get)
+        .expect("CHUNK_SIZE must be set by now")
+});
 
 #[cfg(any(test, feature = "test-utils"))]
 const TEST_BUFFER_SIZE: usize = 100;
@@ -167,7 +171,7 @@ pub struct SourceSender {
 impl SourceSender {
     pub fn builder() -> Builder {
         Builder {
-            buf_size: CHUNK_SIZE,
+            buf_size: *CHUNK_SIZE,
             inner: None,
             named_inners: Default::default(),
             lag_time: Some(histogram!(LAG_TIME_NAME)),
@@ -461,7 +465,7 @@ impl Inner {
         S: Stream<Item = E> + Unpin,
         E: Into<Event> + ByteSizeOf,
     {
-        let mut stream = events.ready_chunks(CHUNK_SIZE);
+        let mut stream = events.ready_chunks(*CHUNK_SIZE);
         while let Some(events) = stream.next().await {
             self.send_batch(events.into_iter()).await?;
         }
@@ -479,7 +483,7 @@ impl Inner {
         // `ComponentEventsDropped` events.
         let events = events.into_iter().map(Into::into);
         let mut unsent_event_count = UnsentEventCount::new(events.len());
-        for events in array::events_into_arrays(events, Some(CHUNK_SIZE)) {
+        for events in array::events_into_arrays(events, Some(*CHUNK_SIZE)) {
             let count = events.len();
             self.send(events).await.inspect_err(|_| {
                 // The unsent event count is discarded here because the caller emits the
@@ -673,7 +677,7 @@ mod tests {
         let (mut sender, _recv) = SourceSender::new_test_sender_with_buffer(1);
 
         let expected_drop = 100;
-        let events: Vec<Event> = (0..(CHUNK_SIZE + expected_drop))
+        let events: Vec<Event> = (0..(*CHUNK_SIZE + expected_drop))
             .map(|_| {
                 Event::Metric(Metric::new(
                     "name",

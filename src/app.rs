@@ -36,6 +36,12 @@ pub fn worker_threads() -> Option<NonZeroUsize> {
     NonZeroUsize::new(WORKER_THREADS.load(Ordering::Relaxed))
 }
 
+pub static CHUNK_SIZE: AtomicUsize = AtomicUsize::new(0);
+
+pub fn chunk_size() -> Option<NonZeroUsize> {
+    NonZeroUsize::new(CHUNK_SIZE.load(Ordering::Relaxed))
+}
+
 pub struct ApplicationConfig {
     pub config_paths: Vec<config::ConfigPath>,
     pub topology: RunningTopology,
@@ -196,6 +202,15 @@ impl Application {
         }
 
         let runtime = build_runtime(opts.root.threads, "vector-worker")?;
+
+        CHUNK_SIZE
+            .compare_exchange(
+                0,
+                opts.root.chunk_size,
+                Ordering::Acquire,
+                Ordering::Relaxed,
+            )
+            .unwrap_or_else(|_| panic!("double chunk_size initialization"));
 
         // Signal handler for OS and provider messages.
         let mut signals = SignalPair::new(&runtime);

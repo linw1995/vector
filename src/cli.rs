@@ -126,6 +126,10 @@ pub struct RootOpts {
     #[arg(short, long, env = "VECTOR_THREADS")]
     pub threads: Option<usize>,
 
+    /// Number of Chunk Size for the internal buffer
+    #[arg(long, env = "VECTOR_CHUNK_SIZE", default_value = "1000")]
+    pub chunk_size: usize,
+
     /// Enable more detailed internal logging. Repeat to increase level. Overridden by `--quiet`.
     #[arg(short, long, action = ArgAction::Count)]
     pub verbose: u8,
